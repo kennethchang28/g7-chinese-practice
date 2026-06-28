@@ -83,6 +83,105 @@
     return Array.from(merged);
   }
 
+  /* ===== 題組（會考閱讀題組）支援：block 模型 =====
+     block = { id, kind:'single'|'group', lesson, passage, passageTitle, questions:[...] }
+     單題 → 一個 size 1 的 single block；題組 → 一個含選文與多題的 group block。 */
+
+  // ---- 題組結構驗證 ----
+  function validateGroups(groups) {
+    const errors = [];
+    if (!Array.isArray(groups)) { errors.push('題組集不是陣列'); return errors; }
+    const seenG = new Set();
+    groups.forEach(function (g, i) {
+      const where = '題組[' + i + '] (id=' + (g && g.id) + ')';
+      if (!g || typeof g !== 'object') { errors.push(where + ' 不是物件'); return; }
+      if (g.id == null || g.id === '') errors.push(where + ' 缺 id');
+      else if (seenG.has(g.id)) errors.push(where + ' id 重複'); else seenG.add(g.id);
+      if (!g.lesson) errors.push(where + ' 缺 lesson');
+      if (!g.passage || typeof g.passage !== 'string' || !g.passage.trim()) errors.push(where + ' 缺選文 passage');
+      if (!Array.isArray(g.questions) || g.questions.length < 1) errors.push(where + ' 題組無題目');
+      else validateBank(g.questions).forEach(function (e) { errors.push(where + ' › ' + e); });
+    });
+    return errors;
+  }
+
+  // ---- 將單題與題組組成 block 清單 ----
+  function composeBlocks(bank, groups) {
+    const blocks = [];
+    (bank || []).forEach(function (q) {
+      blocks.push({ id: 'S:' + q.id, kind: 'single', lesson: q.lesson, passage: '', passageTitle: '', questions: [q] });
+    });
+    (groups || []).forEach(function (g) {
+      blocks.push({ id: 'G:' + g.id, kind: 'group', lesson: g.lesson, passage: g.passage, passageTitle: g.passageTitle || '', questions: g.questions.slice() });
+    });
+    return blocks;
+  }
+
+  // ---- 依課分層，從 items 取出 k 個（round-robin 平均涵蓋各課） ----
+  function stratifiedTake(items, k, rng) {
+    if (k <= 0) return [];
+    rng = rng || Math.random;
+    const byLesson = {};
+    items.forEach(function (b) { (byLesson[b.lesson] = byLesson[b.lesson] || []).push(b); });
+    const lessons = shuffle(Object.keys(byLesson), rng);
+    lessons.forEach(function (L) { byLesson[L] = shuffle(byLesson[L], rng); });
+    const out = [];
+    let idx = 0;
+    while (out.length < k) {
+      if (lessons.every(function (L) { return byLesson[L].length === 0; })) break;
+      const L = lessons[idx % lessons.length];
+      if (byLesson[L].length) out.push(byLesson[L].shift());
+      idx++;
+    }
+    return out;
+  }
+
+  // ---- 抽一份試卷：混合題組與單題，總題數恰為 count，題組整組保留 ----
+  // 顯示順序：單題在前、閱讀題組在後（貼近會考結構）。回傳 { blocks, questions }。
+  function pickPaper(blocks, count, excludeIds, rng) {
+    rng = rng || Math.random;
+    const exclude = new Set(excludeIds || []);
+    let avail = blocks.filter(function (b) { return !exclude.has(b.id); });
+    const availQ = avail.reduce(function (s, b) { return s + b.questions.length; }, 0);
+    if (availQ < count) {
+      avail = avail.concat(shuffle(blocks.filter(function (b) { return exclude.has(b.id); }), rng));
+    }
+    const groups = shuffle(avail.filter(function (b) { return b.kind === 'group'; }), rng);
+    const singles = avail.filter(function (b) { return b.kind === 'single'; });
+    const singlesCount = singles.length;
+    // 目標題組題數：約佔六成上限，但須保留足夠單題把總數補滿到 count
+    const targetGroupQ = Math.min(count, Math.floor(count * 0.6));
+    const pickedGroups = [];
+    let gq = 0;
+    for (let i = 0; i < groups.length; i++) {
+      const sz = groups[i].questions.length;
+      if (gq >= targetGroupQ) break;
+      if (gq + sz > count) continue;                         // 不可超過總題數
+      if ((count - (gq + sz)) > singlesCount) continue;      // 剩餘須能用單題補滿
+      pickedGroups.push(groups[i]);
+      gq += sz;
+    }
+    const needSingles = count - gq;
+    const pickedSingles = stratifiedTake(shuffle(singles, rng), needSingles, rng);
+    const orderedSingles = shuffle(pickedSingles, rng);
+    const orderedGroups = shuffle(pickedGroups, rng);
+    const paperBlocks = orderedSingles.concat(orderedGroups);
+    const questions = [];
+    paperBlocks.forEach(function (b) { b.questions.forEach(function (q) { questions.push(q); }); });
+    return { blocks: paperBlocks, questions: questions };
+  }
+
+  // ---- 計算下一份要排除的 block id：保證連續兩份不重複，並盡量累積 ----
+  function nextPaperExclusion(prevExclude, paperBlocks, allBlocks, count) {
+    const pickedIds = paperBlocks.map(function (b) { return b.id; });
+    const merged = new Set(prevExclude || []);
+    pickedIds.forEach(function (id) { merged.add(id); });
+    let remainingQ = 0;
+    allBlocks.forEach(function (b) { if (!merged.has(b.id)) remainingQ += b.questions.length; });
+    if (remainingQ < count) return pickedIds.slice(); // 重置為僅排除剛出的這一份
+    return Array.from(merged);
+  }
+
   // ---- 批改：questions 為本份題目，answers 為 { [id]: 所選索引 } ----
   function grade(questions, answers) {
     answers = answers || {};
@@ -119,9 +218,13 @@
 
   const API = {
     validateBank: validateBank,
+    validateGroups: validateGroups,
     shuffle: shuffle,
     pickQuestions: pickQuestions,
     nextExclusion: nextExclusion,
+    composeBlocks: composeBlocks,
+    pickPaper: pickPaper,
+    nextPaperExclusion: nextPaperExclusion,
     grade: grade,
     formatTime: formatTime
   };

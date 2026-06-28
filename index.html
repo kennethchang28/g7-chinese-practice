@@ -73,6 +73,13 @@
   .opt .lead { font-weight: 700; color: var(--brand-dark); margin-right: 2px; }
   .opt.chosen { background: #f6edda; border-color: var(--accent); }
 
+  /* 閱讀題組選文 */
+  .passage { padding: 16px 18px; margin-bottom: 14px; border-left: 5px solid var(--accent); background: #fcf7ec; }
+  .passage-label { font-size: .82rem; font-weight: 800; color: var(--brand-dark); margin-bottom: 6px; }
+  .passage-title { font-size: 1.02rem; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+  .passage-body { white-space: pre-wrap; font-family: "Noto Serif TC","Songti TC","PMingLiU",serif; font-size: 1.05rem; line-height: 1.9; color: #34302a; }
+  .rq .passage-mini { font-size: .78rem; color: var(--brand-dark); background: #f0e6d2; border-radius: 6px; padding: 1px 8px; }
+
   .submit-wrap { text-align: center; margin: 22px 0 40px; }
 
   /* 結果 */
@@ -129,7 +136,7 @@
         <li><b>語文常識</b>　漢字流變與書法欣賞</li>
         <li><b>自學篇章</b>　越南安妮</li>
       </ul>
-      <p class="meta-line">📚 題庫共 <b id="bankCount">—</b> 題，難度為挑戰級（適合追求班級／全校前段的同學）。</p>
+      <p class="meta-line">📚 題庫共 <b id="bankCount">—</b> 題，仿<b>國中教育會考</b>素養導向命題：含<b>閱讀題組</b>（文言對讀、現代散文、新詩、圖表與應用文）與情境單題，難度對齊會考中偏難（以「會考滿分」為訓練目標）。</p>
       <p class="meta-line">⏱️ 作答全程計時。交卷後立即批改、顯示分數與各課表現，並附每題詳解。</p>
       <p class="meta-line">🔄 點「再出一份」會抽出全新題目，<b>保證不會和上一份重複</b>。</p>
       <div class="start-actions">
@@ -187,13 +194,16 @@
 <script src="questions_yuwen.js"></script>
 <script src="questions_annie.js"></script>
 <script src="questions_mix.js"></script>
+<script src="questions_huikao.js"></script>
 <script>
 (function () {
   'use strict';
   var BANK = window.QUESTION_BANK || [];
+  var GROUPS = window.QUESTION_GROUPS || [];
+  var BLOCKS = (typeof QuizCore !== 'undefined') ? QuizCore.composeBlocks(BANK, GROUPS) : [];
   var PER_PAPER = 20;
   var LETTERS = ['A', 'B', 'C', 'D'];
-  var STORE_KEY = 'cp_excludeIds_v1';
+  var STORE_KEY = 'cp_excludeBlocks_v2';
 
   var el = function (id) { return document.getElementById(id); };
   var screens = { start: el('screen-start'), quiz: el('screen-quiz'), result: el('screen-result') };
@@ -201,13 +211,16 @@
     Object.keys(screens).forEach(function (k) { screens[k].classList.toggle('hidden', k !== name); });
   }
 
-  var currentPaper = [];
+  var currentBlocks = [];   // 本份的 block（含閱讀題組）
+  var currentPaper = [];    // 本份題目（攤平，依顯示順序）
+  var qMeta = {};           // qid -> { passageTitle }
   var answers = {};
   var timerHandle = null;
   var startTs = 0;
   var elapsedSec = 0;
 
-  el('bankCount').textContent = BANK.length;
+  var totalQ = BANK.length + GROUPS.reduce(function (s, g) { return s + (g.questions ? g.questions.length : 0); }, 0);
+  el('bankCount').textContent = totalQ;
 
   /* ---- localStorage：保存「下一份要排除的題目」以防重複 ---- */
   function loadExclude() {
@@ -237,10 +250,13 @@
   /* ---- 產生一份新試卷 ---- */
   function newPaper() {
     var exclude = loadExclude();
-    currentPaper = QuizCore.pickQuestions(BANK, PER_PAPER, exclude);
+    var paper = QuizCore.pickPaper(BLOCKS, PER_PAPER, exclude);
+    currentBlocks = paper.blocks;
+    currentPaper = paper.questions;
     // 更新排除清單：保證下一份不與這一份重複
-    saveExclude(QuizCore.nextExclusion(exclude, currentPaper, BANK.length, PER_PAPER));
+    saveExclude(QuizCore.nextPaperExclusion(exclude, paper.blocks, BLOCKS, PER_PAPER));
     answers = {};
+    qMeta = {};
     renderQuiz();
     updateAnswered();
     show('quiz');
@@ -249,28 +265,46 @@
   }
 
   /* ---- 繪製題目 ---- */
+  function optionHtml(q) {
+    return q.options.map(function (opt, j) {
+      return '<label class="opt" data-opt="' + j + '">' +
+               '<input type="radio" name="q_' + escapeHtml(q.id) + '" value="' + j + '">' +
+               '<span class="lead">(' + LETTERS[j] + ')</span><span>' + escapeHtml(opt) + '</span>' +
+             '</label>';
+    }).join('');
+  }
+  function questionHtml(q, n) {
+    return '<div class="q card" data-id="' + escapeHtml(q.id) + '">' +
+      '<div class="qhead"><span class="qno">第 ' + n + ' 題</span>' +
+        '<span class="tag">' + escapeHtml(q.lesson) + '</span>' +
+        (q.type ? '<span class="tag type">' + escapeHtml(q.type) + '</span>' : '') +
+      '</div>' +
+      '<div class="stem">' + escapeHtml(q.stem) + '</div>' +
+      '<div class="opts">' + optionHtml(q) + '</div>' +
+    '</div>';
+  }
+
   function renderQuiz() {
     var box = el('questions');
-    box.innerHTML = '';
-    currentPaper.forEach(function (q, i) {
-      var card = document.createElement('div');
-      card.className = 'q card';
-      card.setAttribute('data-id', q.id);
-      var opts = q.options.map(function (opt, j) {
-        return '<label class="opt" data-opt="' + j + '">' +
-                 '<input type="radio" name="q_' + q.id + '" value="' + j + '">' +
-                 '<span class="lead">(' + LETTERS[j] + ')</span><span>' + escapeHtml(opt) + '</span>' +
-               '</label>';
-      }).join('');
-      card.innerHTML =
-        '<div class="qhead"><span class="qno">第 ' + (i + 1) + ' 題</span>' +
-          '<span class="tag">' + escapeHtml(q.lesson) + '</span>' +
-          (q.type ? '<span class="tag type">' + escapeHtml(q.type) + '</span>' : '') +
-        '</div>' +
-        '<div class="stem">' + escapeHtml(q.stem) + '</div>' +
-        '<div class="opts">' + opts + '</div>';
-      box.appendChild(card);
+    var html = '';
+    var n = 0;
+    currentBlocks.forEach(function (b) {
+      if (b.kind === 'group') {
+        var cnt = b.questions.length;
+        var range = (cnt > 1) ? ('（第 ' + (n + 1) + '～' + (n + cnt) + ' 題）') : ('（第 ' + (n + 1) + ' 題）');
+        html += '<div class="passage card">' +
+          '<div class="passage-label">📖 閱讀題組 ' + range + '</div>' +
+          (b.passageTitle ? '<div class="passage-title">' + escapeHtml(b.passageTitle) + '</div>' : '') +
+          '<div class="passage-body">' + escapeHtml(b.passage) + '</div>' +
+        '</div>';
+      }
+      b.questions.forEach(function (q) {
+        n += 1;
+        qMeta[q.id] = { passageTitle: (b.kind === 'group') ? (b.passageTitle || '閱讀題組') : '' };
+        html += questionHtml(q, n);
+      });
     });
+    box.innerHTML = html;
     // 綁定選取事件
     box.querySelectorAll('input[type=radio]').forEach(function (input) {
       input.addEventListener('change', function () {
@@ -292,8 +326,8 @@
   /* ---- 交卷批改 ---- */
   function submit() {
     var answered = Object.keys(answers).length;
-    if (answered < PER_PAPER) {
-      if (!window.confirm('還有 ' + (PER_PAPER - answered) + ' 題未作答，確定要交卷嗎？')) return;
+    if (answered < currentPaper.length) {
+      if (!window.confirm('還有 ' + (currentPaper.length - answered) + ' 題未作答，確定要交卷嗎？')) return;
     }
     stopTimer();
     var result = QuizCore.grade(currentPaper, answers);
@@ -341,9 +375,11 @@
         return '<div class="' + cls + '">(' + LETTERS[j] + ') ' + escapeHtml(opt) + mark + '</div>';
       }).join('');
       var yourAns = (chosen == null) ? '（未作答）' : LETTERS[chosen];
+      var pmeta = qMeta[q.id];
+      var pTag = (pmeta && pmeta.passageTitle) ? '<span class="passage-mini">📖 ' + escapeHtml(pmeta.passageTitle) + '</span>' : '';
       card.innerHTML =
         '<div class="rqhead"><span class="qno">第 ' + (i + 1) + ' 題</span>' +
-          '<span class="tag">' + escapeHtml(q.lesson) + '</span>' +
+          '<span class="tag">' + escapeHtml(q.lesson) + '</span>' + pTag +
           '<span class="badge ' + (isCorrect ? 'ok">答對' : 'no">答錯') + '</span>' +
         '</div>' +
         '<div class="stem">' + escapeHtml(q.stem) + '</div>' +
