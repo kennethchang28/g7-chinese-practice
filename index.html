@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>國中七下國文・第三次段考練習系統</title>
+<style>
+  :root {
+    --bg: #f5f1e8; --paper: #fffdf8; --ink: #2b2b2b; --sub: #6b6256;
+    --brand: #8a5a2b; --brand-dark: #6b4420; --accent: #c8a25a;
+    --line: #e4dccb; --ok: #2e7d4f; --no: #c0392b; --okbg: #e8f4ec; --nobg: #fbeae8;
+    --shadow: 0 2px 10px rgba(80,60,30,.08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",system-ui,sans-serif;
+    line-height: 1.7; -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 16px; }
+  header.site {
+    background: linear-gradient(135deg,var(--brand),var(--brand-dark));
+    color: #fff8ec; text-align: center; padding: 22px 16px 18px;
+  }
+  header.site h1 { margin: 0 0 4px; font-size: 1.45rem; letter-spacing: 1px; }
+  header.site p { margin: 0; font-size: .92rem; opacity: .9; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border: none; border-radius: 10px; padding: 12px 22px; font-size: 1.05rem; font-weight: 700;
+    cursor: pointer; font-family: inherit; transition: transform .05s, box-shadow .2s, background .2s;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--brand); color: #fff; box-shadow: 0 3px 0 var(--brand-dark); }
+  .btn-primary:hover { background: var(--brand-dark); }
+  .btn-ghost { background: #efe7d6; color: var(--brand-dark); }
+  .btn-ghost:hover { background: #e7dcc5; }
+  .hidden { display: none !important; }
+
+  /* 開始畫面 */
+  #screen-start .intro { padding: 22px; margin-top: 18px; }
+  #screen-start h2 { margin: 0 0 10px; color: var(--brand-dark); }
+  .scope { list-style: none; padding: 0; margin: 12px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .scope li { background: #f3ecdd; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: .92rem; }
+  .scope li b { color: var(--brand-dark); }
+  .meta-line { font-size: .9rem; color: var(--sub); margin: 10px 0 0; }
+  .start-actions { text-align: center; margin-top: 18px; }
+
+  /* 計時 / 進度列 */
+  #bar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,253,248,.96);
+    backdrop-filter: blur(4px); border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 16px; margin: 0 -16px 14px; flex-wrap: wrap;
+  }
+  #bar .timer { font-variant-numeric: tabular-nums; font-size: 1.3rem; font-weight: 800; color: var(--brand-dark); }
+  #bar .timer .lbl { font-size: .72rem; font-weight: 600; color: var(--sub); margin-right: 6px; }
+  #bar .progress { font-size: .92rem; color: var(--sub); }
+  #bar .progress b { color: var(--ok); font-size: 1.05rem; }
+
+  /* 題目 */
+  .q { padding: 16px 18px; margin-bottom: 14px; }
+  .q .qhead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .q .qno { font-weight: 800; color: var(--brand); font-size: 1.05rem; }
+  .tag { font-size: .72rem; background: #efe3cc; color: var(--brand-dark); border-radius: 20px; padding: 2px 10px; white-space: nowrap; }
+  .tag.type { background: #e6eef0; color: #3b6470; }
+  .q .stem { font-size: 1.08rem; margin: 2px 0 12px; }
+  .opts { display: grid; gap: 8px; }
+  .opt { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1.5px solid var(--line);
+    border-radius: 9px; cursor: pointer; transition: background .12s, border-color .12s; }
+  .opt:hover { background: #faf5e9; }
+  .opt input { margin-top: 4px; accent-color: var(--brand); transform: scale(1.15); }
+  .opt .lead { font-weight: 700; color: var(--brand-dark); margin-right: 2px; }
+  .opt.chosen { background: #f6edda; border-color: var(--accent); }
+
+  .submit-wrap { text-align: center; margin: 22px 0 40px; }
+
+  /* 結果 */
+  #screen-result { margin-top: 18px; }
+  .score-card { padding: 22px; text-align: center; margin-bottom: 16px; }
+  .score-num { font-size: 3rem; font-weight: 800; color: var(--brand); line-height: 1; }
+  .score-num small { font-size: 1.1rem; color: var(--sub); font-weight: 600; }
+  .score-sub { color: var(--sub); margin-top: 6px; }
+  .score-time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--brand-dark); }
+  .lesson-stats { display: grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap: 8px; margin-top: 16px; text-align: left; }
+  .lesson-stats .ls { background: #f3ecdd; border-radius: 8px; padding: 8px 12px; font-size: .9rem; }
+  .lesson-stats .ls .n { font-weight: 800; color: var(--brand-dark); }
+  .bar-mini { height: 6px; background: #e4dccb; border-radius: 4px; overflow: hidden; margin-top: 5px; }
+  .bar-mini > i { display: block; height: 100%; background: var(--ok); }
+  .result-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 18px 0; }
+
+  .review h3 { color: var(--brand-dark); border-left: 4px solid var(--accent); padding-left: 10px; margin: 22px 0 12px; }
+  .rq { padding: 14px 16px; margin-bottom: 12px; border-left: 5px solid var(--ok); }
+  .rq.wrong { border-left-color: var(--no); }
+  .rq .rqhead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .badge { font-size: .76rem; font-weight: 800; border-radius: 6px; padding: 1px 8px; }
+  .badge.ok { background: var(--okbg); color: var(--ok); }
+  .badge.no { background: var(--nobg); color: var(--no); }
+  .rq .ro { font-size: .96rem; margin: 2px 0; padding: 6px 10px; border-radius: 6px; }
+  .rq .ro.correct { background: var(--okbg); }
+  .rq .ro.your-wrong { background: var(--nobg); }
+  .rq .expl { font-size: .92rem; color: var(--sub); background: #f7f2e6; border-radius: 8px; padding: 9px 12px; margin-top: 8px; }
+  .rq .expl b { color: var(--brand-dark); }
+  footer { text-align: center; color: var(--sub); font-size: .82rem; padding: 20px; }
+  .nojs { background: var(--nobg); color: var(--no); padding: 14px; border-radius: 10px; margin-top: 16px; }
+  @media (max-width: 520px) {
+    .scope { grid-template-columns: 1fr; }
+    header.site h1 { font-size: 1.2rem; }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <h1>國中七年級下學期・第三次段考　國文練習系統</h1>
+  <p>翰林版　第七課～第十課＋語文常識＋自學篇章　｜　每份 20 題選擇題</p>
+</header>
+
+<div class="wrap">
+
+  <!-- 開始畫面 -->
+  <section id="screen-start">
+    <div class="card intro">
+      <h2>練習範圍與說明</h2>
+      <ul class="scope">
+        <li><b>第七課</b>　五柳先生傳（陶淵明）</li>
+        <li><b>第八課</b>　摩登土產鳳梨酥（洪愛珠）</li>
+        <li><b>第九課</b>　謝天（陳之藩）</li>
+        <li><b>第十課</b>　貓的天堂（左拉）</li>
+        <li><b>語文常識</b>　漢字流變與書法欣賞</li>
+        <li><b>自學篇章</b>　越南安妮</li>
+      </ul>
+      <p class="meta-line">📚 題庫共 <b id="bankCount">—</b> 題，難度為挑戰級（適合追求班級／全校前段的同學）。</p>
+      <p class="meta-line">⏱️ 作答全程計時。交卷後立即批改、顯示分數與各課表現，並附每題詳解。</p>
+      <p class="meta-line">🔄 點「再出一份」會抽出全新題目，<b>保證不會和上一份重複</b>。</p>
+      <div class="start-actions">
+        <button id="startBtn" class="btn btn-primary">開始作答（20 題）</button>
+      </div>
+      <noscript><div class="nojs">本系統需要啟用 JavaScript 才能運作，請開啟瀏覽器的 JavaScript。</div></noscript>
+    </div>
+  </section>
+
+  <!-- 作答畫面 -->
+  <section id="screen-quiz" class="hidden">
+    <div id="bar">
+      <div class="timer"><span class="lbl">作答時間</span><span id="timer">00:00</span></div>
+      <div class="progress">已作答 <b id="answeredCount">0</b> / 20 題</div>
+      <button id="submitBtnTop" class="btn btn-ghost" style="padding:8px 16px;font-size:.95rem;">交卷</button>
+    </div>
+    <div id="questions"></div>
+    <div class="submit-wrap">
+      <button id="submitBtn" class="btn btn-primary">交卷並批改</button>
+    </div>
+  </section>
+
+  <!-- 結果畫面 -->
+  <section id="screen-result" class="hidden">
+    <div class="card score-card">
+      <div class="score-num"><span id="scoreNum">0</span><small> 分</small></div>
+      <div class="score-sub">答對 <b id="correctNum">0</b> / 20 題　｜　作答時間 <span class="score-time" id="usedTime">00:00</span></div>
+      <div class="lesson-stats" id="lessonStats"></div>
+    </div>
+    <div class="result-actions">
+      <button id="regenBtn" class="btn btn-primary">🔄 再出一份（全新題目）</button>
+      <button id="topBtn" class="btn btn-ghost">回到頁首</button>
+    </div>
+    <div class="review">
+      <h3>逐題詳解</h3>
+      <div id="reviewList"></div>
+    </div>
+    <div class="result-actions">
+      <button id="regenBtn2" class="btn btn-primary">🔄 再出一份（全新題目）</button>
+    </div>
+  </section>
+
+  <footer>
+    國中七下國文第三次段考練習系統　·　離線可用　·　MIT 授權<br>
+    題目與詳解僅供教學與自我練習之用。
+  </footer>
+</div>
+
+<!-- 引擎與題庫（各 questions_*.js 會將題目 push 至 window.QUESTION_BANK） -->
+<script src="quiz-core.js"></script>
+<script src="questions_L7.js"></script>
+<script src="questions_L8.js"></script>
+<script src="questions_L9.js"></script>
+<script src="questions_L10.js"></script>
+<script src="questions_yuwen.js"></script>
+<script src="questions_annie.js"></script>
+<script src="questions_mix.js"></script>
+<script>
+(function () {
+  'use strict';
+  var BANK = window.QUESTION_BANK || [];
+  var PER_PAPER = 20;
+  var LETTERS = ['A', 'B', 'C', 'D'];
+  var STORE_KEY = 'cp_excludeIds_v1';
+
+  var el = function (id) { return document.getElementById(id); };
+  var screens = { start: el('screen-start'), quiz: el('screen-quiz'), result: el('screen-result') };
+  function show(name) {
+    Object.keys(screens).forEach(function (k) { screens[k].classList.toggle('hidden', k !== name); });
+  }
+
+  var currentPaper = [];
+  var answers = {};
+  var timerHandle = null;
+  var startTs = 0;
+  var elapsedSec = 0;
+
+  el('bankCount').textContent = BANK.length;
+
+  /* ---- localStorage：保存「下一份要排除的題目」以防重複 ---- */
+  function loadExclude() {
+    try { var v = JSON.parse(localStorage.getItem(STORE_KEY)); return Array.isArray(v) ? v : []; }
+    catch (e) { return []; }
+  }
+  function saveExclude(ids) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(ids)); } catch (e) {}
+  }
+
+  /* ---- 計時器 ---- */
+  function startTimer() {
+    stopTimer();
+    startTs = Date.now();
+    elapsedSec = 0;
+    el('timer').textContent = QuizCore.formatTime(0);
+    timerHandle = setInterval(function () {
+      elapsedSec = Math.floor((Date.now() - startTs) / 1000);
+      el('timer').textContent = QuizCore.formatTime(elapsedSec);
+    }, 250);
+  }
+  function stopTimer() {
+    if (timerHandle) { clearInterval(timerHandle); timerHandle = null; }
+    if (startTs) elapsedSec = Math.floor((Date.now() - startTs) / 1000);
+  }
+
+  /* ---- 產生一份新試卷 ---- */
+  function newPaper() {
+    var exclude = loadExclude();
+    currentPaper = QuizCore.pickQuestions(BANK, PER_PAPER, exclude);
+    // 更新排除清單：保證下一份不與這一份重複
+    saveExclude(QuizCore.nextExclusion(exclude, currentPaper, BANK.length, PER_PAPER));
+    answers = {};
+    renderQuiz();
+    updateAnswered();
+    show('quiz');
+    window.scrollTo(0, 0);
+    startTimer();
+  }
+
+  /* ---- 繪製題目 ---- */
+  function renderQuiz() {
+    var box = el('questions');
+    box.innerHTML = '';
+    currentPaper.forEach(function (q, i) {
+      var card = document.createElement('div');
+      card.className = 'q card';
+      card.setAttribute('data-id', q.id);
+      var opts = q.options.map(function (opt, j) {
+        return '<label class="opt" data-opt="' + j + '">' +
+                 '<input type="radio" name="q_' + q.id + '" value="' + j + '">' +
+                 '<span class="lead">(' + LETTERS[j] + ')</span><span>' + escapeHtml(opt) + '</span>' +
+               '</label>';
+      }).join('');
+      card.innerHTML =
+        '<div class="qhead"><span class="qno">第 ' + (i + 1) + ' 題</span>' +
+          '<span class="tag">' + escapeHtml(q.lesson) + '</span>' +
+          (q.type ? '<span class="tag type">' + escapeHtml(q.type) + '</span>' : '') +
+        '</div>' +
+        '<div class="stem">' + escapeHtml(q.stem) + '</div>' +
+        '<div class="opts">' + opts + '</div>';
+      box.appendChild(card);
+    });
+    // 綁定選取事件
+    box.querySelectorAll('input[type=radio]').forEach(function (input) {
+      input.addEventListener('change', function () {
+        var id = input.name.slice(2);
+        answers[id] = Number(input.value);
+        // 視覺上標記選取
+        var card = input.closest('.q');
+        card.querySelectorAll('.opt').forEach(function (o) { o.classList.remove('chosen'); });
+        input.closest('.opt').classList.add('chosen');
+        updateAnswered();
+      });
+    });
+  }
+
+  function updateAnswered() {
+    el('answeredCount').textContent = Object.keys(answers).length;
+  }
+
+  /* ---- 交卷批改 ---- */
+  function submit() {
+    var answered = Object.keys(answers).length;
+    if (answered < PER_PAPER) {
+      if (!window.confirm('還有 ' + (PER_PAPER - answered) + ' 題未作答，確定要交卷嗎？')) return;
+    }
+    stopTimer();
+    var result = QuizCore.grade(currentPaper, answers);
+    renderResult(result);
+    show('result');
+    window.scrollTo(0, 0);
+  }
+
+  /* ---- 繪製結果 ---- */
+  var LESSON_ORDER = ['五柳先生傳', '摩登土產鳳梨酥', '謝天', '貓的天堂', '漢字與書法', '越南安妮', '綜合測驗'];
+  function renderResult(result) {
+    el('scoreNum').textContent = result.score;
+    el('correctNum').textContent = result.correct;
+    el('usedTime').textContent = QuizCore.formatTime(elapsedSec);
+
+    // 各課表現
+    var stats = el('lessonStats');
+    stats.innerHTML = '';
+    LESSON_ORDER.forEach(function (L) {
+      var s = result.byLesson[L];
+      if (!s) return;
+      var pct = Math.round((s.correct / s.total) * 100);
+      var div = document.createElement('div');
+      div.className = 'ls';
+      div.innerHTML = L + '：<span class="n">' + s.correct + '/' + s.total + '</span>' +
+        '<div class="bar-mini"><i style="width:' + pct + '%"></i></div>';
+      stats.appendChild(div);
+    });
+
+    // 逐題詳解
+    var list = el('reviewList');
+    list.innerHTML = '';
+    currentPaper.forEach(function (q, i) {
+      var chosen = answers[q.id];
+      var isCorrect = chosen === q.answer;
+      var card = document.createElement('div');
+      card.className = 'rq card' + (isCorrect ? '' : ' wrong');
+      var optHtml = q.options.map(function (opt, j) {
+        var cls = 'ro';
+        if (j === q.answer) cls += ' correct';
+        else if (j === chosen) cls += ' your-wrong';
+        var mark = '';
+        if (j === q.answer) mark = '　✅ 正解';
+        else if (j === chosen) mark = '　❌ 你的選擇';
+        return '<div class="' + cls + '">(' + LETTERS[j] + ') ' + escapeHtml(opt) + mark + '</div>';
+      }).join('');
+      var yourAns = (chosen == null) ? '（未作答）' : LETTERS[chosen];
+      card.innerHTML =
+        '<div class="rqhead"><span class="qno">第 ' + (i + 1) + ' 題</span>' +
+          '<span class="tag">' + escapeHtml(q.lesson) + '</span>' +
+          '<span class="badge ' + (isCorrect ? 'ok">答對' : 'no">答錯') + '</span>' +
+        '</div>' +
+        '<div class="stem">' + escapeHtml(q.stem) + '</div>' +
+        '<div>' + optHtml + '</div>' +
+        '<div class="expl"><b>詳解：</b>' + escapeHtml(q.explanation) +
+          '　<span style="color:var(--sub)">（你的答案：' + yourAns + '）</span></div>';
+      list.appendChild(card);
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /* ---- 事件綁定 ---- */
+  el('startBtn').addEventListener('click', newPaper);
+  el('submitBtn').addEventListener('click', submit);
+  el('submitBtnTop').addEventListener('click', submit);
+  el('regenBtn').addEventListener('click', newPaper);
+  el('regenBtn2').addEventListener('click', newPaper);
+  el('topBtn').addEventListener('click', function () { window.scrollTo(0, 0); });
+
+  // 題庫載入失敗的防呆
+  if (!BANK.length || typeof QuizCore === 'undefined') {
+    el('startBtn').disabled = true;
+    el('startBtn').textContent = '題庫載入失敗';
+  }
+})();
+</script>
+</body>
+</html>
